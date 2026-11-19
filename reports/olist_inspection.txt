@@ -1,0 +1,22 @@
+SUPPLYPULSE - OLIST INSPECTION REPORT
+Total rows: 99,441
+Total columns: 5
+Duplicate rows: 0
+Columns with missing values: 0
+
+DATA TYPES:
+customer_id                   str
+customer_unique_id            str
+customer_zip_code_prefix    int64
+customer_city                 str
+customer_state                str
+
+MISSING VALUES:
+Series([], )
+
+UNIQUE VALUES:
+customer_id                 99441
+customer_unique_id          96096
+customer_zip_code_prefix    14994
+customer_city                4119
+customer_state                 27
