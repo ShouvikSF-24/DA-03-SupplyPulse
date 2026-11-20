@@ -1,27 +1,19 @@
-from src.database import engine, test_connection
+
+import pytest
+
+from src.database import engine, test_connection as get_connection_info
 
 
-def main():
-    print("=" * 60)
-    print("SUPPLYPULSE - PYTHON DATABASE CONNECTION TEST")
-    print("=" * 60)
+def test_database_connection():
+    """Verify that Python can connect to the SupplyPulse database."""
 
     try:
-        result = test_connection()
+        result = get_connection_info()
 
-        print("\nConnection successful!")
-        print(f"Database: {result[0]}")
-        print(f"User: {result[1]}")
-        print(f"Version: {result[2]}")
-
-    except Exception as error:
-        print("\nDatabase connection failed!")
-        print(f"Error: {error}")
-        raise
+        assert result is not None
+        assert result[0] == "supplypulse"
+        assert result[1] == "supplypulse_user"
+        assert "PostgreSQL" in result[2]
 
     finally:
         engine.dispose()
-
-
-if __name__ == "__main__":
-    main()

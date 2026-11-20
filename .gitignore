@@ -1,5 +1,4 @@
-
-# Environment and secrets
+﻿# Environment and secrets
 .env
 .env.*
 !.env.example
@@ -35,3 +34,9 @@ desktop.ini
 # Temporary files
 *.tmp
 *.bak
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
