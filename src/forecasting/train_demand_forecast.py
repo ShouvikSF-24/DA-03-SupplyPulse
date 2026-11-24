@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-
+from prophet import Prophet
 from src.config import PROJECT_ROOT
 
 
@@ -81,6 +81,36 @@ def calculate_wape(actual, predicted):
         / denominator
     ) * 100
 
+def forecast_with_prophet(series, periods=3):
+    """Generate monthly demand forecasts using Prophet."""
+
+    prophet_data = pd.DataFrame({
+        "ds": series.index,
+        "y": series.values,
+    })
+
+    model = Prophet(
+        yearly_seasonality=True,
+        weekly_seasonality=False,
+        daily_seasonality=False,
+    )
+
+    model.fit(prophet_data)
+
+    future = model.make_future_dataframe(
+        periods=periods,
+        freq="MS",
+    )
+
+    predictions = model.predict(future)
+
+    forecast_values = predictions.tail(periods)["yhat"]
+
+    return np.maximum(
+        forecast_values.to_numpy(dtype=float),
+        0,
+    )
+
 
 def main():
     print("=" * 65)
@@ -151,7 +181,15 @@ def main():
             actual_values,
             seasonal_values,
         )
+        prophet_predictions = forecast_with_prophet(
+            train,
+            periods=TEST_MONTHS,
+        )
 
+        prophet_wape = calculate_wape(
+            actual_values,
+            prophet_predictions,
+        )
         evaluations.append({
             "product_id": int(product_id),
             "product_name": product_data["product_name"].iloc[0],
@@ -159,6 +197,7 @@ def main():
             "actual_units": float(actual_values.sum()),
             "moving_average_wape": moving_wape,
             "seasonal_naive_wape": seasonal_wape,
+            "prophet_wape": prophet_wape,
         })
 
     evaluation_df = pd.DataFrame(evaluations)
@@ -172,6 +211,7 @@ def main():
 
     moving_predictions = []
     seasonal_predictions = []
+    prophet_predictions = []
 
     # Reconstruct the held-out predictions for aggregate evaluation.
     for product_id, product_data in df.groupby("product_id"):
@@ -194,6 +234,16 @@ def main():
                 series.iloc[position - 12]
             )
 
+        train = series.iloc[:-TEST_MONTHS]
+
+        product_prophet_predictions = forecast_with_prophet(
+            train,
+            periods=TEST_MONTHS,
+        )
+
+        prophet_predictions.extend(
+            product_prophet_predictions
+        )
     actual_by_product = []
 
     for product_id, product_data in df.groupby("product_id"):
@@ -221,11 +271,22 @@ def main():
         actual_all,
         np.array(seasonal_predictions),
     )
+    prophet_wape = calculate_wape(
+        actual_all,
+        np.array(prophet_predictions),
+    )
 
-    if moving_wape <= seasonal_wape:
-        selected_method = "THREE_MONTH_MOVING_AVERAGE"
-    else:
-        selected_method = "SEASONAL_NAIVE"
+    model_wapes = {
+        "THREE_MONTH_MOVING_AVERAGE": moving_wape,
+        "SEASONAL_NAIVE": seasonal_wape,
+        "PROPHET": prophet_wape,
+    }
+
+    selected_method = min(
+        model_wapes,
+        key=model_wapes.get,
+    )
+
 
     print("\n========== BACKTEST RESULTS ==========")
     print(f"Eligible products: {eligible_products}")
@@ -233,6 +294,7 @@ def main():
     print(f"Holdout months per product: {TEST_MONTHS}")
     print(f"Moving average WAPE: {moving_wape:.2f}%")
     print(f"Seasonal naive WAPE: {seasonal_wape:.2f}%")
+    print(f"Prophet WAPE: {prophet_wape:.2f}%")
     print(f"Selected method: {selected_method}")
 
     # Generate next-month forecasts using the selected method.
@@ -248,8 +310,16 @@ def main():
 
         if selected_method == "THREE_MONTH_MOVING_AVERAGE":
             predicted_demand = series.iloc[-3:].mean()
-        else:
+
+        elif selected_method == "SEASONAL_NAIVE":
             predicted_demand = series.iloc[-12]
+
+        else:
+            prophet_forecast = forecast_with_prophet(
+            series,
+            periods=1,
+            )
+            predicted_demand = prophet_forecast[0]
 
         next_month = (
             series.index[-1] + pd.offsets.MonthBegin(1)
@@ -274,6 +344,7 @@ def main():
     evaluation_df["selected_method"] = selected_method
     evaluation_df["aggregate_moving_average_wape"] = moving_wape
     evaluation_df["aggregate_seasonal_naive_wape"] = seasonal_wape
+    evaluation_df["aggregate_prophet_wape"] = prophet_wape
 
     OUTPUT_DIR.mkdir(
         parents=True,
